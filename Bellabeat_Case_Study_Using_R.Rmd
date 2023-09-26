@@ -1,0 +1,258 @@
+---
+title: "Bellabeat Case Study using R"
+author: Joe Cooper
+output: html_notebook
+---
+
+## Table Of Contents
+- [About The Company](#About)
+- [Business Task](#Business)
+- [Overview Of Data](#Overview)
+  - [Challenges With Data](#Challenges)
+- [Loading Packages and Setting Up Environment](#Loading)
+  - [Importing Datasets](#Importing)
+- [Metadata Analysis](#Metadata)
+  - [Findings](#Findings)
+  - [Merging Data](#Merging)
+- [Visualizations](#Visualizations)
+- [Summary Of Findings and Marketing Strategy](#Summary)
+  - [Target Market](#Target)
+  - [Recommendations](#Recommendations)
+- [Citations](#Citations)
+
+## <a name="About"></a> About The Company
+
+Bellabeat is a manufacturer of health-focused products for women.  They have been searching for new ways to grow their business and believe that analyzing smart device trends can glean some realizations about how to market to their customer base. Most importantly they are wanting to know how consumers are using smart devices so that they can tailor a marketing campaign to those behaviors.
+
+
+## <a name="Business"></a> Business Task
+
+Using current tracking patterns of smart device users, identify key behaviors to suggest recommendations for growing sales with a tailored Bellabeat marketing campaign.
+
+
+## <a name="Overview"></a> Overview of data
+
+The data available for this analysis consists of tracking patterns of a competitor product obtained via public data.  The data is spread across multiple categories including activity and intensity of activity, calories burned, sleep and weight statistics.  I will be using these files in my analysis.
+
+### <a name="Challenges"></a> Challenges with data
+
+The data has a few issues to work through:
+
+  - Data varies between daily, hourly and minute level granularity. It will be important to standardize these.
+  - Some users have not reported all data or have reported data inconsistently.
+  - While observations may be made from this data it is recommended to retrieve additional records for a more statistically reliable analysis. Another suggestion would be to train a machine learning model to build a larger dataset.
+  
+
+## <a name="Loading"></a> Loading packages and setting up environment:
+  
+```{r}
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(sqldf)
+```
+
+### <a name="Importing"></a> Importing datasets:
+
+```{r}
+activity <- read_csv("../project/dailyActivity_merged.csv",show_col_types = FALSE)
+intensity <- read_csv("../project/hourlyIntensities_merged.csv",show_col_types = FALSE)
+calories <- read_csv("../project/hourlyCalories_merged.csv",show_col_types = FALSE)
+sleep <- read_csv("../project/sleepDay_merged.csv",show_col_types = FALSE)
+weight <- read_csv("../project/weightLogInfo_merged.csv",show_col_types = FALSE)
+```
+
+Confirming data was loaded correctly:
+
+```{r}
+head(activity)
+```
+
+
+The timestamp data seems inconsistent between the files and needs standardization to conduct a proper analysis using split dates and times.
+
+
+```{r}
+# intensity
+intensity$ActivityHour=as.POSIXct(intensity$ActivityHour, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone())
+intensity$time <- format(intensity$ActivityHour, format = "%H:%M:%S")
+intensity$date <- format(intensity$ActivityHour, format = "%m/%d/%y")
+# calories
+calories$ActivityHour=as.POSIXct(calories$ActivityHour, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone())
+calories$time <- format(calories$ActivityHour, format = "%H:%M:%S")
+calories$date <- format(calories$ActivityHour, format = "%m/%d/%y")
+# activity
+activity$ActivityDate=as.POSIXct(activity$ActivityDate, format="%m/%d/%Y", tz=Sys.timezone())
+activity$date <- format(activity$ActivityDate, format = "%m/%d/%y")
+# sleep
+sleep$SleepDay=as.POSIXct(sleep$SleepDay, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone())
+sleep$date <- format(sleep$SleepDay, format = "%m/%d/%y")
+```
+
+## <a name="Metadata"></a> Metadata Analysis
+
+```{r}
+n_distinct(activity$Id)
+n_distinct(calories$Id)
+n_distinct(intensity$Id)
+n_distinct(sleep$Id)
+n_distinct(weight$Id)
+```
+
+
+The activity, calories and intensity records consist of 33 participants each.  The sleep records consist of 24 participants (while there are many observations here we need to be cognizant that a statistically significant sample size of participants is at least 30).  There are only 8 participants who recorded weight data.  This is not enough data to make even guarded conclusions.
+
+
+```{r}
+# activity
+activity %>% select(TotalSteps, TotalDistance, VeryActiveMinutes, FairlyActiveMinutes, LightlyActiveMinutes, SedentaryMinutes) %>%
+  summary()
+
+# intensity
+intensity %>% select(TotalIntensity) %>%
+  summary()
+
+# calories
+calories %>% select(Calories) %>%
+  summary()
+
+# sleep
+sleep %>% select(TotalSleepRecords, TotalMinutesAsleep, TotalTimeInBed) %>%
+  summary()
+
+# weight
+weight %>% select(WeightPounds) %>%
+  summary()
+```
+
+### <a name="Findings"></a> Findings
+
+- Users are spending an average of 16 hours in a sedentary state. With an average of 7 hours of sleep, this leaves room for 1 hour on average of time spent at any actvity level.
+
+- Users are spending very little time in a fairly or very active state.  The lightly active state has by far the most time spent.
+
+- Users are not moving enough based upon total steps in the observations.  The majority of walking fitness programs focus on a daily step goal of 10,000 steps. In the data we see only about a quarter of daily observations with more than this number.
+
+
+### <a name="Merging"></a> Merging Data
+
+I need to merge the activity, sleep and intensity data so that I can view daily aggregations and continue my analysis.  This requires converting the intensity file into a daily aggregate so that I have unique records in the date column with which I will merge.
+
+
+```{r}
+grouped_intensity = sqldf("select Id, sum(TotalIntensity) as TotalIntensity, avg(AverageIntensity) as HourlyAverageIntensity, date
+                          from intensity
+                          group by Id, date")
+```
+
+                          
+## <a name="Visualizations"></a> Visualizations
+
+```{r}
+ggplot(data=activity, aes(x=TotalSteps, y=Calories)) + 
+  geom_point() + geom_smooth() + labs(title="Total Steps vs. Calories")
+```
+
+
+The above visual indicates a positive correlation between number of steps walked and calories burned.  An important argument to get users more active if fitness or weight loss is their goal.
+
+
+```{r}
+ggplot(data=sleep, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + 
+  geom_point()+ labs(title="Total Minutes Asleep vs. Total Time In Bed")
+```
+
+
+The above visual indicates a strong positive correlation between sleeping minutes and total minutes spent in bed.  In general we would agree that time spent in bed is mostly used for sleep.
+
+
+```{r}
+ggplot(data=sleep, aes(x=(TotalTimeInBed-TotalMinutesAsleep), y=TotalTimeInBed)) + 
+  geom_point()+geom_smooth()+ labs(title="Total Minutes Awake vs. Total Time In Bed")+ annotate("rect", xmin=100, xmax=260, ymin=250, ymax=675, fill="red",alpha=0.4)+ annotate("text", x=325, y=450,label="Not restful sleep", color="red")
+```
+
+
+At first glance, there appears to be a subset of the participants who are not getting a restful night's sleep. Looking more into the data we find this is actually mostly caused by the observations of an outlier and not a cause for concern statistically.
+
+
+```{r}
+ggplot(data=merged_activity, aes(x=SedentaryMinutes, y=TotalMinutesAsleep)) + 
+  geom_point()+geom_smooth()+ labs(title="Sedentary Minutes vs. Amount Of Sleep")+ annotate("line")
+```
+
+
+```{r}
+ggplot(data=poor_sleep, aes(x=SedentaryMinutes, y=TotalMinutesAsleep)) + 
+  geom_point()+geom_smooth()+ labs(title="Amount of Sleep by Intensity of Activity")+ annotate("segment",x=750,xend=950,y=200,yend=450,color="red")
+```
+
+
+Looking closer at the participants who are not getting at least 7 hours of sleep we see a sharp decline in sleep as sedentary hours increases. Those who spend more than 60% of their day (14.4 hours) in a sedentary state are getting less than 5 hours of sleep on average.
+
+```{r}
+cat("This equates to", n_distinct(subset(poor_sleep,TotalMinutesAsleep<300)$Id), "participants or 2/3rds of the population with less than 5 hours of sleep.")
+
+
+```
+
+```{r}
+cat("Spending just one hour less in a sedentary state throughout the day resulted in",round(mean(subset(poor_sleep, SedentaryMinutes < 804)$TotalMinutesAsleep)/60), "hours of sleep on average. A marked improvement.")
+
+
+```
+
+
+
+```{r}
+intensity_by_hour <- intensity %>%
+  group_by(Id,time) %>%
+  drop_na() %>%
+  summarise(mean_total=mean(TotalIntensity))
+
+ggplot(data=intensity_by_hour, aes(x=time,y=mean_total,color=mean_total,fill=mean_total)) + 
+  geom_histogram(stat="identity")+
+ theme(axis.text.x=element_text(angle=90,vjust=0.5))+ labs(title="Intensity Of Activity By Hour")
+```
+
+We see here that the most active hours appear to be in the morning upon waking and commuting as well as in the evening following the workday.
+
+Some participants do seem more active during midday around lunchtime.  This is a good time to remind more sedentary participants to move, even if just going for a walk after lunch.
+
+Lastly there appears to be a trend of later bedtimes for many participants. There are only about 5 hours of very low activity and an appreciable amount of activity past 10pm.  Given the overwhelming amount of sedentary time present in the data, this time may not necessarily have been spent in a productive manner.
+
+## <a name="Summary"></a> **Summary Of Findings and Marketing Strategy**
+
+Bellabeat has a unique opportunity to guide women along a path of better health through a comparison of activity data and what we already know about living a healthy lifestyle. We should be leveraging the sophistication of Bellabeat's products to ensure that users are relying on fitness tracking as a marker in their progress to a healthier lifestyle. This ensures consistency in product usage and a reinforcement of the value proposition of purchasing our products in the future.
+
+### <a name="Target"></a> **Target Market**
+
+It appears that our users are living a fairly sedentary life between the hours of 5am and 5pm.  In addition, with the exception of a few outliers, most participants are also mostly sedentary in the evening hours. Activity does show a spike in the midday around lunchtime.  This data is consistent with a customer who is probably working a full-time job at an office or other non-physical labor.
+
+### <a name="Recommendations"></a> **Recommendations**
+
+1. One of the easiest ways to promote a healthier lifestyle would be for Bellabeat to implement a 10,000 Steps A Day program into the app.  The National Institute Of Health has found that these programs can increase physical activity by an average of 159 mins/week for those who participate (NIH,2020).
+
+2. For the most part there does seem to be a fair amount of light activity but it simply is not enough for a healthy lifestyle when compared to the World Health Organization's suggestion of 150-300 minutes per week of moderate activity (WHO, 2020). Looking solely at the summary statistics we can see that the users are nowhere close to this.  Messaging should point out the minimum activity intensity and time spent for a healthy lifestyle.
+
+3. According to a meta-analysis of 16 studies performed by the National Institute Of Health of 16 studies on sleep, there is a clear pattern of sleep disturbance among people with sedentary lifestyles(NIH,2017). I would suggest messaging in advertisements about the importance of sleep patterns and how just one more hour of activity during the day could result in as much as an hour more of sleep. This represents an opportunity for an in-app reminder to get the recommended 7-9 hours of sleep per night. An alert to go to bed based upon waking time would reinforce this behavior. 
+
+4. With a clear window in time of some users being more active during the midday, there is also an opportunity for an in-app reminder to get moving during the hours of 12pm and 2pm. This could be timed to occur just before the user is most active between these hours. A simple suggestion to go for 30 minute walk after lunch could improve upon the high sedentary behavior among users.
+
+5. Given that activity spikes noticeably after 5pm, a structured workout could be a good way to maximize the users' use of this time. My suggestion would be to develop a workout program to reinforce healthy habits among users that falls inline with WHO's suggestion of at least 30 minutes of moderate exercise per day. Users may think that they are being active but following a suggested intensity and timeframe may improve upon their pre-existing efforts.
+
+
+
+## <a name="Citations"></a>Citations:
+
+*"Every Step Counts: Understanding the Success of Implementing The 10,000 Steps Project" National Institute Of Health, 2020, https://pubmed.ncbi.nlm.nih.gov/32141876/*
+
+*"WHO guidelines on physical activity
+and sedentary behaviour: at a glance." Geneva: World Health
+Organization; 2020. Licence: CC BY-NC-SA 3.0 IGO.*
+
+
+*"Sedentary Behavior and Sleep Problems: a Systematic Review and Meta-Analysis" National Institute Of Health, 2017,https://pubmed.ncbi.nlm.nih.gov/27830446/*
+
+
