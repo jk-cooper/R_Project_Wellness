@@ -1,1 +1,3 @@
 # R_Project_Wellness
+
+This project is a capstone to my Google Data Analytics Certificate.  It consists of a case study of a company called Bellabeat that manufactures high-end wellness and fitness trackers.  The assignment was to idenitfy key trends in fitness tracker user data to develop recommendations to assist the marketing department in developing a strategy to increase sales.  The data is public and can be found on Kaggle.  Using R Studio I developed a notebook and markdown file to use to present my findings.  I used R because I was not familiar with it prior to taking this certification course.  This was a great addition to my prior education and experience with Python's Pandas and Matplotlib libraries.
